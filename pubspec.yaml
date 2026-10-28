@@ -7,17 +7,58 @@ environment:
   sdk: ^3.13.5
 
 dependencies:
+  # Flutter Core & Localization
   flutter:
     sdk: flutter
-  # Internationalization & formatting
-  intl: any
   flutter_localizations:
     sdk: flutter
+  intl: any
+
+  # Database & Offline Persistence (SQLite + Drift)
+  drift: ^2.31.0
+  drift_flutter: ^0.2.8
+  sqlite3_flutter_libs: ^0.5.28
+
+  # State Management & Dependency Injection
+  flutter_riverpod: ^3.4.3
+
+  # Navigation & Routing
+  go_router: ^18.1.1
+
+  # Security, PIN & Biometrics
+  crypto: ^3.0.7
+  flutter_secure_storage: ^11.2.0
+  local_auth: ^3.0.2
+
+  # Receipt, PDF & Thermal Printer
+  pdf: ^3.13.1
+  printing: ^5.15.1
+  esc_pos_utils_plus: ^2.0.4
+
+  # File Handling, Backup & Export/Import
+  file_picker: ^13.2.0
+  share_plus: ^13.3.1
+  csv: ^8.0.0
+
+  # System Utilities & Identifiers
+  uuid: ^4.6.0
+  path: ^1.9.1
+  path_provider: ^2.1.6
+  path_provider_foundation: 2.4.0
 
 dev_dependencies:
+  # Testing
   flutter_test:
     sdk: flutter
+  integration_test:
+    sdk: flutter
+
+  # Code Quality & Linting
   flutter_lints: ^6.0.0
+
+  # Code Generation
+  build_runner: ^2.4.14
+  drift_dev: ^2.31.0
 
 flutter:
   uses-material-design: true
