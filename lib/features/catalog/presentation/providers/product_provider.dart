@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kas_usaha/features/catalog/data/repositories/mock_product_repository.dart';
 import 'package:kas_usaha/features/catalog/domain/models/product.dart';
 import 'package:kas_usaha/features/catalog/domain/repositories/product_repository.dart';
+import 'package:kas_usaha/features/catalog/domain/validators/product_validator.dart';
 import 'package:uuid/uuid.dart';
 
 /// Status lifecycle for product CRUD operations.
@@ -237,16 +238,54 @@ class ProductNotifier extends Notifier<ProductState> {
       return false;
     }
 
-    // Validation 3: Selling price cannot be negative
-    if (sellingPrice < 0) {
+    // Validation 3: Selling Price
+    final sellingPriceError = ProductValidator.validateSellingPrice(sellingPrice);
+    if (sellingPriceError != null) {
       state = state.copyWith(
         status: ProductStatus.error,
-        errorMessage: 'Harga jual tidak boleh kurang dari Rp 0.',
+        errorMessage: sellingPriceError,
       );
       return false;
     }
 
-    // Validation 4: SKU uniqueness (if SKU provided)
+    // Validation 4: Cost Price
+    final costPriceError = ProductValidator.validateCostPrice(costPrice);
+    if (costPriceError != null) {
+      state = state.copyWith(
+        status: ProductStatus.error,
+        errorMessage: costPriceError,
+      );
+      return false;
+    }
+
+    // Validation 5: Stock & Minimum Stock (when trackStock is enabled)
+    if (trackStock) {
+      final stockError = ProductValidator.validateStock(
+        stock.toString(),
+        trackStock: true,
+      );
+      if (stockError != null) {
+        state = state.copyWith(
+          status: ProductStatus.error,
+          errorMessage: stockError,
+        );
+        return false;
+      }
+
+      final minStockError = ProductValidator.validateMinStock(
+        minStock.toString(),
+        trackStock: true,
+      );
+      if (minStockError != null) {
+        state = state.copyWith(
+          status: ProductStatus.error,
+          errorMessage: minStockError,
+        );
+        return false;
+      }
+    }
+
+    // Validation 6: SKU uniqueness (if SKU provided)
     if (trimmedSku.isNotEmpty) {
       final isSkuDuplicate = state.products.any(
         (p) => p.sku.toLowerCase() == trimmedSku.toLowerCase(),
@@ -323,16 +362,54 @@ class ProductNotifier extends Notifier<ProductState> {
       return false;
     }
 
-    // Validation 3: Selling price cannot be negative
-    if (updated.sellingPrice < 0) {
+    // Validation 3: Selling Price
+    final sellingPriceError = ProductValidator.validateSellingPrice(updated.sellingPrice);
+    if (sellingPriceError != null) {
       state = state.copyWith(
         status: ProductStatus.error,
-        errorMessage: 'Harga jual tidak boleh kurang dari Rp 0.',
+        errorMessage: sellingPriceError,
       );
       return false;
     }
 
-    // Validation 4: SKU uniqueness among other products
+    // Validation 4: Cost Price
+    final costPriceError = ProductValidator.validateCostPrice(updated.costPrice);
+    if (costPriceError != null) {
+      state = state.copyWith(
+        status: ProductStatus.error,
+        errorMessage: costPriceError,
+      );
+      return false;
+    }
+
+    // Validation 5: Stock & Minimum Stock (when trackStock is enabled)
+    if (updated.trackStock) {
+      final stockError = ProductValidator.validateStock(
+        updated.stock.toString(),
+        trackStock: true,
+      );
+      if (stockError != null) {
+        state = state.copyWith(
+          status: ProductStatus.error,
+          errorMessage: stockError,
+        );
+        return false;
+      }
+
+      final minStockError = ProductValidator.validateMinStock(
+        updated.minStock.toString(),
+        trackStock: true,
+      );
+      if (minStockError != null) {
+        state = state.copyWith(
+          status: ProductStatus.error,
+          errorMessage: minStockError,
+        );
+        return false;
+      }
+    }
+
+    // Validation 6: SKU uniqueness among other products
     if (trimmedSku.isNotEmpty) {
       final isSkuDuplicate = state.products.any(
         (p) =>

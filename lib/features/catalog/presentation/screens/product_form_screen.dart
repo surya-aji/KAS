@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kas_usaha/app/theme/app_colors.dart';
 import 'package:kas_usaha/app/theme/app_spacing.dart';
 import 'package:kas_usaha/features/catalog/domain/models/product.dart';
+import 'package:kas_usaha/features/catalog/domain/validators/product_validator.dart';
 import 'package:kas_usaha/features/catalog/presentation/providers/category_provider.dart';
 import 'package:kas_usaha/features/catalog/presentation/providers/product_provider.dart';
 import 'package:kas_usaha/shared/formatters/currency_formatter.dart';
@@ -77,7 +79,12 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
     _isActive = p?.isActive ?? true;
 
     // Pre-select first category if creating new product and categories are available
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final catNotifier = ref.read(categoryProvider.notifier);
+      if (ref.read(categoryProvider).categories.isEmpty) {
+        await catNotifier.loadCategories();
+      }
+      if (!mounted) return;
       final categoryState = ref.read(categoryProvider);
       if (_selectedCategoryId.isEmpty && categoryState.categories.isNotEmpty) {
         final defaultCat = categoryState.categories.firstWhere(
@@ -172,6 +179,15 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
       });
       if (success) {
         Navigator.of(context).pop(true);
+      } else {
+        final errorMsg = ref.read(productProvider).errorMessage ??
+            'Gagal menyimpan produk. Silakan periksa data input.';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMsg),
+            backgroundColor: AppColors.error,
+          ),
+        );
       }
     }
   }
@@ -611,12 +627,10 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                 _sellingPrice = val;
               });
             },
-            validator: (val) {
-              if (_sellingPrice <= 0) {
-                return 'Harga jual harus lebih besar dari Rp 0';
-              }
-              return null;
-            },
+            validator: (val) => ProductValidator.validateSellingPrice(
+              _sellingPrice,
+              rawText: val,
+            ),
           ),
           const SizedBox(height: AppSpacing.md),
 
@@ -632,6 +646,10 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                 _costPrice = val;
               });
             },
+            validator: (val) => ProductValidator.validateCostPrice(
+              _costPrice,
+              rawText: val,
+            ),
           ),
           const SizedBox(height: AppSpacing.md),
 
@@ -688,6 +706,44 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
               ],
             ),
           ),
+
+          // Potential loss warning banner
+          if (ProductValidator.isPotentialLoss(_sellingPrice, _costPrice)) ...[
+            const SizedBox(height: AppSpacing.md),
+            Container(
+              padding: const EdgeInsets.all(AppSpacing.sm),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? AppColors.errorDark.withAlpha(40)
+                    : AppColors.errorLight,
+                border: Border.all(
+                  color: isDark
+                      ? AppColors.errorDark
+                      : AppColors.error.withAlpha(80),
+                ),
+                borderRadius: AppRadius.roundedSm,
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.warning_amber_rounded,
+                    color: AppColors.error,
+                    size: 20,
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      'Perhatian: Harga modal lebih tinggi dari harga jual. Menghasilkan estimasi rugi sebesar ${CurrencyFormatter.formatRupiah(_costPrice - _sellingPrice)} per unit.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: isDark ? AppColors.errorLight : AppColors.errorDark,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -731,52 +787,47 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                 Expanded(
                   child: AppTextField(
                     controller: _stockController,
-                    label: 'Jumlah Stok Saat Ini',
+                    label: 'Jumlah Stok Saat Ini *',
                     hint: '0',
                     prefixIcon:
                         const Icon(Icons.inventory_rounded, size: 20),
                     keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                    ],
                     textInputAction: TextInputAction.next,
                     onChanged: (val) => setState(() {}),
-                    validator: (val) {
-                      if (!_trackStock) return null;
-                      if (val == null || val.trim().isEmpty) {
-                        return 'Stok wajib diisi';
-                      }
-                      final num = int.tryParse(val.trim());
-                      if (num == null || num < 0) {
-                        return 'Nilai tidak valid';
-                      }
-                      return null;
-                    },
+                    validator: (val) => ProductValidator.validateStock(
+                      val,
+                      trackStock: _trackStock,
+                    ),
                   ),
                 ),
                 const SizedBox(width: AppSpacing.md),
                 Expanded(
                   child: AppTextField(
                     controller: _minStockController,
-                    label: 'Batas Minimum Stok',
+                    label: 'Batas Minimum Stok *',
                     hint: '5',
                     prefixIcon:
                         const Icon(Icons.warning_amber_rounded, size: 20),
                     keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                    ],
                     textInputAction: TextInputAction.done,
                     helperText: 'Peringatan stok menipis',
-                    validator: (val) {
-                      if (!_trackStock) return null;
-                      if (val == null || val.trim().isEmpty) {
-                        return 'Batas wajib diisi';
-                      }
-                      final num = int.tryParse(val.trim());
-                      if (num == null || num < 0) {
-                        return 'Nilai tidak valid';
-                      }
-                      return null;
-                    },
+                    onChanged: (val) => setState(() {}),
+                    validator: (val) => ProductValidator.validateMinStock(
+                      val,
+                      trackStock: _trackStock,
+                    ),
                   ),
                 ),
               ],
             ),
+            const SizedBox(height: AppSpacing.sm),
+            _buildStockStatusIndicator(theme, isDark),
           ],
 
           const Divider(height: AppSpacing.lg),
@@ -806,5 +857,113 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildStockStatusIndicator(ThemeData theme, bool isDark) {
+    if (!_trackStock) return const SizedBox.shrink();
+
+    final stock = int.tryParse(_stockController.text.trim()) ?? 0;
+    final minStock = int.tryParse(_minStockController.text.trim()) ?? 0;
+
+    final status = ProductValidator.evaluateStockStatus(
+      trackStock: _trackStock,
+      stock: stock,
+      minStock: minStock,
+    );
+
+    switch (status) {
+      case ProductStockLevel.outOfStock:
+        return Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md,
+            vertical: AppSpacing.sm,
+          ),
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.errorDark.withAlpha(40) : AppColors.errorLight,
+            border: Border.all(
+              color: isDark ? AppColors.errorDark : AppColors.error.withAlpha(80),
+            ),
+            borderRadius: AppRadius.roundedSm,
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.error_outline_rounded, color: AppColors.error, size: 18),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  'Stok Habis: Produk memiliki stok 0 dan akan langsung ditandai habis di kasir POS.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: isDark ? AppColors.errorLight : AppColors.errorDark,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+
+      case ProductStockLevel.lowStock:
+        return Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md,
+            vertical: AppSpacing.sm,
+          ),
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.warningDark.withAlpha(40) : AppColors.warningLight,
+            border: Border.all(
+              color: isDark ? AppColors.warningDark : AppColors.warning.withAlpha(80),
+            ),
+            borderRadius: AppRadius.roundedSm,
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.warning_amber_rounded, color: AppColors.warning, size: 18),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  'Peringatan Stok Menipis: Stok ($stock) berada pada atau di bawah batas minimum ($minStock).',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: isDark ? AppColors.warningLight : AppColors.warningDark,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+
+      case ProductStockLevel.inStock:
+        return Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md,
+            vertical: AppSpacing.sm,
+          ),
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.successDark.withAlpha(40) : AppColors.successLight,
+            border: Border.all(
+              color: isDark ? AppColors.successDark : AppColors.success.withAlpha(80),
+            ),
+            borderRadius: AppRadius.roundedSm,
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.check_circle_outline_rounded, color: AppColors.success, size: 18),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  'Stok Aman: Stok saat ini ($stock) mencukupi di atas batas minimum ($minStock).',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: isDark ? AppColors.successLight : AppColors.successDark,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+
+      case ProductStockLevel.notTracked:
+        return const SizedBox.shrink();
+    }
   }
 }

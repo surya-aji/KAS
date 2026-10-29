@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:kas_usaha/app/theme/app_spacing.dart';
 
 /// Unified text field adhering to the application theme.
@@ -21,6 +22,7 @@ class AppTextField extends StatefulWidget {
     this.autofocus = false,
     this.maxLines = 1,
     this.minLines,
+    this.inputFormatters,
     this.validator,
     this.onChanged,
     this.onFieldSubmitted,
@@ -42,6 +44,7 @@ class AppTextField extends StatefulWidget {
   final bool autofocus;
   final int? maxLines;
   final int? minLines;
+  final List<TextInputFormatter>? inputFormatters;
   final FormFieldValidator<String>? validator;
   final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onFieldSubmitted;
@@ -102,6 +105,7 @@ class _AppTextFieldState extends State<AppTextField> {
           autofocus: widget.autofocus,
           keyboardType: widget.keyboardType,
           textInputAction: widget.textInputAction,
+          inputFormatters: widget.inputFormatters,
           maxLines: widget.obscureText ? 1 : widget.maxLines,
           minLines: widget.minLines,
           validator: widget.validator,

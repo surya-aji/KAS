@@ -13,6 +13,7 @@ export 'presentation/widgets/category_form_sheet.dart';
 export 'data/repositories/mock_product_repository.dart';
 export 'domain/models/product.dart';
 export 'domain/repositories/product_repository.dart';
+export 'domain/validators/product_validator.dart';
 export 'presentation/providers/product_provider.dart';
 export 'presentation/screens/product_form_screen.dart';
 export 'presentation/screens/product_list_screen.dart';

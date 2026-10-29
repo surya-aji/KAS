@@ -346,6 +346,49 @@ void main() {
         sellingPrice: -500,
       );
       expect(negativePrice, isFalse);
+      expect(container.read(productProvider).errorMessage, contains('Harga jual'));
+
+      // Zero selling price
+      final zeroPrice = await notifier.createProduct(
+        name: 'Kue Lapis',
+        categoryId: 'c-food',
+        sellingPrice: 0,
+      );
+      expect(zeroPrice, isFalse);
+      expect(container.read(productProvider).errorMessage, contains('Harga jual'));
+
+      // Negative cost price
+      final negativeCost = await notifier.createProduct(
+        name: 'Kue Lapis',
+        categoryId: 'c-food',
+        sellingPrice: 10000,
+        costPrice: -100,
+      );
+      expect(negativeCost, isFalse);
+      expect(container.read(productProvider).errorMessage, contains('Harga modal'));
+
+      // Negative stock when tracking stock
+      final negativeStock = await notifier.createProduct(
+        name: 'Kue Lapis',
+        categoryId: 'c-food',
+        sellingPrice: 10000,
+        stock: -5,
+        trackStock: true,
+      );
+      expect(negativeStock, isFalse);
+      expect(container.read(productProvider).errorMessage, contains('Jumlah stok'));
+
+      // Negative minStock when tracking stock
+      final negativeMinStock = await notifier.createProduct(
+        name: 'Kue Lapis',
+        categoryId: 'c-food',
+        sellingPrice: 10000,
+        stock: 10,
+        minStock: -1,
+        trackStock: true,
+      );
+      expect(negativeMinStock, isFalse);
+      expect(container.read(productProvider).errorMessage, contains('Batas stok minimum'));
 
       // Duplicate SKU
       final duplicateSku = await notifier.createProduct(
@@ -382,6 +425,27 @@ void main() {
         existing.copyWith(sku: 'F02'),
       );
       expect(collision, isFalse);
+
+      // Invalid selling price (zero or negative)
+      final zeroPriceUpdate = await notifier.updateProduct(
+        existing.copyWith(sellingPrice: 0),
+      );
+      expect(zeroPriceUpdate, isFalse);
+      expect(container.read(productProvider).errorMessage, contains('Harga jual'));
+
+      // Invalid cost price (negative)
+      final negativeCostUpdate = await notifier.updateProduct(
+        existing.copyWith(costPrice: -10),
+      );
+      expect(negativeCostUpdate, isFalse);
+      expect(container.read(productProvider).errorMessage, contains('Harga modal'));
+
+      // Invalid stock (negative)
+      final negativeStockUpdate = await notifier.updateProduct(
+        existing.copyWith(stock: -1, trackStock: true),
+      );
+      expect(negativeStockUpdate, isFalse);
+      expect(container.read(productProvider).errorMessage, contains('Jumlah stok'));
 
       // Valid update
       final valid = await notifier.updateProduct(
