@@ -4,6 +4,7 @@ import 'package:kas_usaha/features/business_settings/presentation/screens/busine
 import 'package:kas_usaha/features/catalog/presentation/screens/category_list_screen.dart';
 import 'package:kas_usaha/features/catalog/presentation/screens/product_list_screen.dart';
 import 'package:kas_usaha/features/inventory/presentation/screens/stock_history_screen.dart';
+import 'package:kas_usaha/features/pos/pos.dart';
 import 'package:kas_usaha/shared/widgets/buttons/app_button.dart';
 
 /// Root widget of the application.
@@ -59,9 +60,23 @@ class _PlaceholderHome extends StatelessWidget {
               ),
               const SizedBox(height: 32),
               AppButton(
+                text: 'Buka Layar Kasir / POS (Task T2.1)',
+                leadingIcon: Icons.point_of_sale_rounded,
+                variant: AppButtonVariant.primary,
+                size: AppButtonSize.large,
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const PosScreen(),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 12),
+              AppButton(
                 text: 'Buka Profil Usaha (Task T1.1)',
                 leadingIcon: Icons.storefront_rounded,
-                variant: AppButtonVariant.primary,
+                variant: AppButtonVariant.secondary,
                 size: AppButtonSize.large,
                 onPressed: () {
                   Navigator.of(context).push(
