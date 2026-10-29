@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:kas_usaha/app/theme/app_theme.dart';
 import 'package:kas_usaha/features/business_settings/presentation/screens/business_profile_screen.dart';
 import 'package:kas_usaha/features/catalog/presentation/screens/category_list_screen.dart';
+import 'package:kas_usaha/features/catalog/presentation/screens/product_list_screen.dart';
 import 'package:kas_usaha/shared/widgets/buttons/app_button.dart';
 
 /// Root widget of the application.
@@ -79,6 +80,20 @@ class _PlaceholderHome extends StatelessWidget {
                   Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => const CategoryListScreen(),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 12),
+              AppButton(
+                text: 'Kelola Produk (Task T1.3)',
+                leadingIcon: Icons.inventory_2_rounded,
+                variant: AppButtonVariant.outlined,
+                size: AppButtonSize.large,
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const ProductListScreen(),
                     ),
                   );
                 },
