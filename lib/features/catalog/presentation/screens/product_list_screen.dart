@@ -13,6 +13,7 @@ import 'package:kas_usaha/shared/widgets/dialogs/app_confirm_dialog.dart';
 import 'package:kas_usaha/shared/widgets/feedback/app_empty_state.dart';
 import 'package:kas_usaha/shared/widgets/feedback/app_loading.dart';
 import 'package:kas_usaha/shared/widgets/inputs/app_search_field.dart';
+import 'package:kas_usaha/features/inventory/presentation/screens/stock_history_screen.dart';
 
 /// Screen for managing product catalog, inventory status, search, and filtering (Task T1.3).
 class ProductListScreen extends ConsumerStatefulWidget {
@@ -145,6 +146,17 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
         title: const Text('Katalog Produk'),
         centerTitle: true,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.history_rounded),
+            tooltip: 'Riwayat Perubahan Stok',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const StockHistoryScreen(),
+                ),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
             tooltip: 'Segarkan Produk',
@@ -494,6 +506,17 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
           onToggleActive: () {
             ref.read(productProvider.notifier).toggleProductActive(product);
           },
+          onViewStockHistory: product.trackStock
+              ? () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => StockHistoryScreen(
+                        initialProductId: product.id,
+                      ),
+                    ),
+                  );
+                }
+              : null,
         );
       },
     );

@@ -3,6 +3,7 @@ import 'package:kas_usaha/app/theme/app_theme.dart';
 import 'package:kas_usaha/features/business_settings/presentation/screens/business_profile_screen.dart';
 import 'package:kas_usaha/features/catalog/presentation/screens/category_list_screen.dart';
 import 'package:kas_usaha/features/catalog/presentation/screens/product_list_screen.dart';
+import 'package:kas_usaha/features/inventory/presentation/screens/stock_history_screen.dart';
 import 'package:kas_usaha/shared/widgets/buttons/app_button.dart';
 
 /// Root widget of the application.
@@ -94,6 +95,20 @@ class _PlaceholderHome extends StatelessWidget {
                   Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => const ProductListScreen(),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 12),
+              AppButton(
+                text: 'Riwayat Stok (Task T1.5)',
+                leadingIcon: Icons.history_rounded,
+                variant: AppButtonVariant.secondary,
+                size: AppButtonSize.large,
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const StockHistoryScreen(),
                     ),
                   );
                 },

@@ -17,6 +17,7 @@ class ProductCard extends StatelessWidget {
     this.onEdit,
     this.onDelete,
     this.onToggleActive,
+    this.onViewStockHistory,
   });
 
   final Product product;
@@ -26,6 +27,7 @@ class ProductCard extends StatelessWidget {
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
   final VoidCallback? onToggleActive;
+  final VoidCallback? onViewStockHistory;
 
   @override
   Widget build(BuildContext context) {
@@ -129,6 +131,9 @@ class ProductCard extends StatelessWidget {
                     case 'edit':
                       onEdit?.call();
                       break;
+                    case 'history':
+                      onViewStockHistory?.call();
+                      break;
                     case 'toggle':
                       onToggleActive?.call();
                       break;
@@ -148,6 +153,17 @@ class ProductCard extends StatelessWidget {
                       ],
                     ),
                   ),
+                  if (onViewStockHistory != null && product.trackStock)
+                    const PopupMenuItem<String>(
+                      value: 'history',
+                      child: Row(
+                        children: [
+                          Icon(Icons.history_rounded, size: 18),
+                          SizedBox(width: AppSpacing.sm),
+                          Text('Riwayat Stok'),
+                        ],
+                      ),
+                    ),
                   PopupMenuItem<String>(
                     value: 'toggle',
                     child: Row(
