@@ -2,28 +2,33 @@ import 'package:flutter/material.dart';
 import 'package:kas_usaha/app/theme/app_colors.dart';
 import 'package:kas_usaha/app/theme/app_spacing.dart';
 import 'package:kas_usaha/features/pos/domain/models/cart_item.dart';
+import 'package:kas_usaha/features/pos/domain/models/pos_calculation.dart';
 import 'package:kas_usaha/shared/formatters/currency_formatter.dart';
 import 'package:kas_usaha/shared/widgets/badges/app_badge.dart';
 import 'package:kas_usaha/shared/widgets/buttons/app_button.dart';
 import 'package:kas_usaha/shared/widgets/buttons/app_icon_button.dart';
 
-/// Dedicated interactive order summary sidebar panel for Tablet landscape layouts (Task T2.1 & T2.2).
+/// Dedicated interactive order summary sidebar panel for Tablet landscape layouts (Task T2.1, T2.2 & T2.3).
 ///
 /// Supports:
-/// - Increment (+) and Decrement (-) items.
+/// - Real-time breakdown of subtotal, item discounts, transaction discounts, and tax (Task T2.3).
+/// - Increment (+) and Decrement (-) items with stock limit checking.
 /// - Delete individual items or clear entire cart.
 /// - Direct quantity change & notes editing via interactive quantity badge / edit button.
+/// - One-tap access to configure transaction-level discount and tax settings.
 class PosCartSidebar extends StatelessWidget {
   const PosCartSidebar({
     super.key,
     required this.cartItems,
     required this.totalQuantity,
     required this.totalAmount,
+    this.calculation,
     required this.onIncrementItem,
     required this.onDecrementItem,
     required this.onDeleteItem,
     required this.onClearCart,
     this.onEditItem,
+    this.onConfigureDiscountAndTax,
     this.onCheckout,
   });
 
@@ -33,8 +38,11 @@ class PosCartSidebar extends StatelessWidget {
   /// Total sum of item quantities.
   final int totalQuantity;
 
-  /// Total gross amount in Rupiah.
+  /// Total amount in Rupiah.
   final int totalAmount;
+
+  /// Comprehensive real-time financial calculation of the cart (Task T2.3).
+  final PosCalculation? calculation;
 
   /// Callback when (+) is pressed on an item.
   final ValueChanged<CartItem> onIncrementItem;
@@ -51,6 +59,9 @@ class PosCartSidebar extends StatelessWidget {
   /// Callback to clear entire cart.
   final VoidCallback onClearCart;
 
+  /// Callback to open the transaction discount and tax configuration modal.
+  final VoidCallback? onConfigureDiscountAndTax;
+
   /// Callback to proceed to checkout / payment.
   final VoidCallback? onCheckout;
 
@@ -58,6 +69,14 @@ class PosCartSidebar extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+
+    // Use provided calculation or fallback to simple calculation
+    final calc = calculation ??
+        PosCalculation(
+          totalQuantity: totalQuantity,
+          grossSubtotal: totalAmount,
+          grandTotal: totalAmount,
+        );
 
     return Container(
       decoration: BoxDecoration(
@@ -143,7 +162,7 @@ class PosCartSidebar extends StatelessWidget {
 
           const Divider(height: 1),
 
-          // Summary & Checkout Footer
+          // Real-time Calculation Summary & Checkout Footer (Task T2.3)
           Container(
             padding: const EdgeInsets.all(AppSpacing.md),
             color: isDark
@@ -152,43 +171,142 @@ class PosCartSidebar extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Subtotal ($totalQuantity item):',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
+                // Quick Discount & Tax Adjustment Button
+                if (cartItems.isNotEmpty && onConfigureDiscountAndTax != null) ...[
+                  InkWell(
+                    onTap: onConfigureDiscountAndTax,
+                    borderRadius: AppRadius.roundedSm,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.sm,
+                        vertical: AppSpacing.xs,
+                      ),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary.withAlpha(15),
+                        borderRadius: AppRadius.roundedSm,
+                        border: Border.all(
+                          color: theme.colorScheme.primary.withAlpha(50),
                         ),
-                        overflow: TextOverflow.ellipsis,
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.tune_rounded,
+                            size: 16,
+                            color: theme.colorScheme.primary,
+                          ),
+                          const SizedBox(width: AppSpacing.xs),
+                          Expanded(
+                            child: Text(
+                              'Diskon & Pajak',
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: theme.colorScheme.primary,
+                              ),
+                            ),
+                          ),
+                          if (calc.hasTransactionDiscount) ...[
+                            AppBadge(
+                              label: calc.transactionDiscountType.isPercentage
+                                  ? '-${calc.transactionDiscountValue.toStringAsFixed(calc.transactionDiscountValue % 1 == 0 ? 0 : 1)}%'
+                                  : '-${CurrencyFormatter.formatRupiah(calc.transactionDiscountAmount)}',
+                              variant: AppBadgeVariant.success,
+                            ),
+                            const SizedBox(width: AppSpacing.xxs),
+                          ],
+                          if (calc.isTaxEnabled) ...[
+                            AppBadge(
+                              label: 'PPN ${calc.taxRate.toStringAsFixed(calc.taxRate % 1 == 0 ? 0 : 1)}%',
+                              variant: AppBadgeVariant.info,
+                            ),
+                            const SizedBox(width: AppSpacing.xxs),
+                          ],
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            size: 18,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(width: AppSpacing.xs),
-                    Text(
-                      CurrencyFormatter.formatRupiah(totalAmount),
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                ],
+
+                // Gross Subtotal
+                _buildBreakdownRow(
+                  label: 'Subtotal ($totalQuantity item):',
+                  value: calc.formattedGrossSubtotal,
+                  theme: theme,
                 ),
-                const SizedBox(height: AppSpacing.sm),
+
+                // Item Discounts
+                if (calc.hasItemDiscounts)
+                  _buildBreakdownRow(
+                    label: 'Diskon Item:',
+                    value: '-${calc.formattedItemDiscounts}',
+                    theme: theme,
+                    textColor: AppColors.error,
+                  ),
+
+                // Transaction Discount
+                if (calc.hasTransactionDiscount)
+                  _buildBreakdownRow(
+                    label: '${calc.transactionDiscountLabel}:',
+                    value: '-${calc.formattedTransactionDiscountAmount}',
+                    theme: theme,
+                    textColor: AppColors.error,
+                  ),
+
+                // Taxable Base (DPP)
+                if (calc.isTaxEnabled) ...[
+                  _buildBreakdownRow(
+                    label: 'Dasar Pengenaan Pajak (DPP):',
+                    value: calc.formattedTaxableAmount,
+                    theme: theme,
+                    isSecondary: true,
+                  ),
+                  _buildBreakdownRow(
+                    label: '${calc.taxLabel}:',
+                    value: '+${calc.formattedTaxAmount}',
+                    theme: theme,
+                    textColor: theme.colorScheme.primary,
+                  ),
+                ],
+
+                const SizedBox(height: AppSpacing.xs),
+                const Divider(height: 1),
+                const SizedBox(height: AppSpacing.xs),
+
+                // Grand Total
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Expanded(
-                      child: Text(
-                        'Total Pembayaran',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                        overflow: TextOverflow.ellipsis,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Total Pembayaran',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (calc.hasAnyDiscount)
+                            Text(
+                              'Hemat ${calc.formattedTotalDiscounts}',
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: AppColors.success,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                     const SizedBox(width: AppSpacing.xs),
                     Text(
-                      CurrencyFormatter.formatRupiah(totalAmount),
+                      calc.formattedGrandTotal,
                       style: theme.textTheme.headlineSmall?.copyWith(
                         fontWeight: FontWeight.w800,
                         color: theme.colorScheme.primary,
@@ -197,9 +315,11 @@ class PosCartSidebar extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: AppSpacing.md),
+
+                // Checkout Button
                 AppButton(
                   text: totalQuantity > 0
-                      ? 'Lanjut Pembayaran (${CurrencyFormatter.formatRupiah(totalAmount)})'
+                      ? 'Lanjut Pembayaran (${calc.formattedGrandTotal})'
                       : 'Keranjang Kosong',
                   leadingIcon: Icons.payment_rounded,
                   variant: AppButtonVariant.primary,
@@ -207,6 +327,46 @@ class PosCartSidebar extends StatelessWidget {
                   onPressed: totalQuantity > 0 ? onCheckout : null,
                 ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBreakdownRow({
+    required String label,
+    required String value,
+    required ThemeData theme,
+    Color? textColor,
+    bool isSecondary = false,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 1.5),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: (isSecondary
+                      ? theme.textTheme.bodySmall
+                      : theme.textTheme.bodyMedium)
+                  ?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.xs),
+          Text(
+            value,
+            style: (isSecondary
+                    ? theme.textTheme.bodySmall
+                    : theme.textTheme.bodyMedium)
+                ?.copyWith(
+              fontWeight: isSecondary ? FontWeight.w500 : FontWeight.bold,
+              color: textColor,
             ),
           ),
         ],
@@ -327,12 +487,33 @@ class PosCartSidebar extends StatelessWidget {
                       ),
                     ],
                     const SizedBox(height: AppSpacing.xxs),
-                    Text(
-                      item.formattedSubtotal,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: theme.colorScheme.primary,
-                      ),
+                    // Item Subtotal & Discount Badge (Task T2.3)
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: AppSpacing.xs,
+                      runSpacing: 2,
+                      children: [
+                        Text(
+                          item.formattedSubtotal,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                        if (item.hasDiscount) ...[
+                          Text(
+                            item.formattedGrossSubtotal,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              decoration: TextDecoration.lineThrough,
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                          AppBadge(
+                            label: item.discountDescription,
+                            variant: AppBadgeVariant.success,
+                          ),
+                        ],
+                      ],
                     ),
                   ],
                 ),
@@ -397,7 +578,8 @@ class PosCartSidebar extends StatelessWidget {
                 tooltip: isMaxStockReached
                     ? 'Stok maksimal tercapai'
                     : 'Tambah Kuantitas',
-                onPressed: isMaxStockReached ? null : () => onIncrementItem(item),
+                onPressed:
+                    isMaxStockReached ? null : () => onIncrementItem(item),
               ),
               const SizedBox(width: AppSpacing.xxs),
 

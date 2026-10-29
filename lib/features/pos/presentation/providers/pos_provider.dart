@@ -1,15 +1,26 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:kas_usaha/features/business_settings/domain/models/business_profile.dart';
 import 'package:kas_usaha/features/catalog/domain/models/product.dart';
 import 'package:kas_usaha/features/catalog/presentation/providers/product_provider.dart';
 import 'package:kas_usaha/features/pos/domain/models/cart_item.dart';
+import 'package:kas_usaha/features/pos/domain/models/discount_type.dart';
+import 'package:kas_usaha/features/pos/domain/models/pos_calculation.dart';
+import 'package:kas_usaha/features/pos/domain/services/transaction_calculator.dart';
 import 'package:kas_usaha/shared/formatters/currency_formatter.dart';
 
 /// State representation for the POS cashier screen.
+///
+/// Supports real-time calculation breakdown including item discounts, transaction discounts,
+/// and tax (PPN) with integer arithmetic in Rupiah (Task T2.3).
 class PosState {
   const PosState({
     this.searchQuery = '',
     this.selectedCategoryId,
     this.cartItems = const [],
+    this.transactionDiscountType = DiscountType.percentage,
+    this.transactionDiscountValue = 0.0,
+    this.isTaxApplied = false,
+    this.taxRate = 11.0,
     this.errorMessage,
     this.successMessage,
   });
@@ -23,22 +34,41 @@ class PosState {
   /// Ordered items currently in the cashier transaction.
   final List<CartItem> cartItems;
 
+  /// Unit type for transaction-level discount (% or fixed nominal Rp).
+  final DiscountType transactionDiscountType;
+
+  /// Input value for transaction-level discount (e.g. 10.0 for 10% or 15000 for Rp15.000).
+  final double transactionDiscountValue;
+
+  /// Whether tax is applied to this transaction.
+  final bool isTaxApplied;
+
+  /// Applicable tax rate percentage (e.g. 11.0 for PPN 11%).
+  final double taxRate;
+
   /// Temporary feedback error message.
   final String? errorMessage;
 
   /// Temporary feedback success message.
   final String? successMessage;
 
-  /// Total units / quantity of all items in the cart.
-  int get totalQuantity =>
-      cartItems.fold(0, (sum, item) => sum + item.quantity);
+  /// Comprehensive real-time financial calculation of the cart (Task T2.3).
+  PosCalculation get calculation => TransactionCalculator.calculate(
+        cartItems: cartItems,
+        transactionDiscountType: transactionDiscountType,
+        transactionDiscountValue: transactionDiscountValue,
+        isTaxEnabled: isTaxApplied,
+        taxRate: taxRate,
+      );
 
-  /// Grand total gross amount of the active cart in integer Rupiah.
-  int get totalAmount => cartItems.fold(0, (sum, item) => sum + item.subtotal);
+  /// Total units / quantity of all items in the cart.
+  int get totalQuantity => calculation.totalQuantity;
+
+  /// Grand total payable amount of the active cart in integer Rupiah (reflects discounts & tax).
+  int get totalAmount => calculation.grandTotal;
 
   /// Formatted total currency string (e.g. 'Rp75.000').
-  String get formattedTotalAmount =>
-      CurrencyFormatter.formatRupiah(totalAmount);
+  String get formattedTotalAmount => calculation.formattedGrandTotal;
 
   /// Quantity of a specific product currently added to cart.
   int getCartQuantity(String productId) {
@@ -62,6 +92,10 @@ class PosState {
     String? selectedCategoryId,
     bool clearCategory = false,
     List<CartItem>? cartItems,
+    DiscountType? transactionDiscountType,
+    double? transactionDiscountValue,
+    bool? isTaxApplied,
+    double? taxRate,
     String? errorMessage,
     String? successMessage,
     bool clearError = false,
@@ -73,6 +107,12 @@ class PosState {
           ? null
           : (selectedCategoryId ?? this.selectedCategoryId),
       cartItems: cartItems ?? this.cartItems,
+      transactionDiscountType:
+          transactionDiscountType ?? this.transactionDiscountType,
+      transactionDiscountValue:
+          transactionDiscountValue ?? this.transactionDiscountValue,
+      isTaxApplied: isTaxApplied ?? this.isTaxApplied,
+      taxRate: taxRate ?? this.taxRate,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       successMessage:
           clearSuccess ? null : (successMessage ?? this.successMessage),
@@ -87,6 +127,10 @@ class PosState {
           searchQuery == other.searchQuery &&
           selectedCategoryId == other.selectedCategoryId &&
           listEquals(cartItems, other.cartItems) &&
+          transactionDiscountType == other.transactionDiscountType &&
+          transactionDiscountValue == other.transactionDiscountValue &&
+          isTaxApplied == other.isTaxApplied &&
+          taxRate == other.taxRate &&
           errorMessage == other.errorMessage &&
           successMessage == other.successMessage;
 
@@ -95,6 +139,10 @@ class PosState {
       searchQuery.hashCode ^
       selectedCategoryId.hashCode ^
       cartItems.hashCode ^
+      transactionDiscountType.hashCode ^
+      transactionDiscountValue.hashCode ^
+      isTaxApplied.hashCode ^
+      taxRate.hashCode ^
       errorMessage.hashCode ^
       successMessage.hashCode;
 
@@ -127,6 +175,79 @@ class PosNotifier extends Notifier<PosState> {
     } else {
       state = state.copyWith(selectedCategoryId: categoryId);
     }
+  }
+
+  /// Synchronizes transaction calculation defaults from active business profile settings.
+  void syncWithBusinessProfile(BusinessProfile profile) {
+    state = state.copyWith(
+      isTaxApplied: profile.isTaxEnabled,
+      taxRate: profile.taxRate,
+      transactionDiscountType: DiscountType.percentage,
+      transactionDiscountValue:
+          profile.isDiscountEnabled ? profile.defaultDiscountRate : 0.0,
+    );
+  }
+
+  /// Sets or updates the order-level transaction discount.
+  void setTransactionDiscount({
+    required DiscountType type,
+    required double value,
+  }) {
+    state = state.copyWith(
+      transactionDiscountType: type,
+      transactionDiscountValue: value.clamp(0.0, double.maxFinite),
+    );
+  }
+
+  /// Clears transaction-level discount.
+  void clearTransactionDiscount() {
+    state = state.copyWith(
+      transactionDiscountValue: 0.0,
+    );
+  }
+
+  /// Enables or disables tax (PPN) for the active transaction.
+  void setTaxApplied(bool applied) {
+    state = state.copyWith(isTaxApplied: applied);
+  }
+
+  /// Toggles tax (PPN) on or off.
+  void toggleTax() {
+    state = state.copyWith(isTaxApplied: !state.isTaxApplied);
+  }
+
+  /// Updates tax rate percentage (e.g. 11.0 for PPN 11%).
+  void setTaxRate(double rate) {
+    state = state.copyWith(taxRate: rate.clamp(0.0, 100.0));
+  }
+
+  /// Sets item-level discount for a specific cart product.
+  bool setItemDiscount(
+    String productId, {
+    required DiscountType discountType,
+    required double discountValue,
+  }) {
+    final index =
+        state.cartItems.indexWhere((item) => item.product.id == productId);
+    if (index < 0) return false;
+
+    final updatedCart = List<CartItem>.from(state.cartItems);
+    updatedCart[index] = updatedCart[index].copyWith(
+      discountType: discountType,
+      discountValue: discountValue.clamp(0.0, double.maxFinite),
+    );
+
+    state = state.copyWith(cartItems: updatedCart);
+    return true;
+  }
+
+  /// Clears discount for a specific cart product.
+  bool clearItemDiscount(String productId) {
+    return setItemDiscount(
+      productId,
+      discountType: DiscountType.percentage,
+      discountValue: 0.0,
+    );
   }
 
   /// Adds a product to the cart or increments its quantity by 1.
@@ -246,11 +367,13 @@ class PosNotifier extends Notifier<PosState> {
     }
   }
 
-  /// Atomically updates both quantity and notes for an item in the cart.
+  /// Atomically updates quantity, notes, and item-level discount for a cart item (Task T2.2 & T2.3).
   bool updateCartItemDetails(
     String productId, {
     required int quantity,
     String? notes,
+    DiscountType? discountType,
+    double? discountValue,
   }) {
     final index =
         state.cartItems.indexWhere((item) => item.product.id == productId);
@@ -275,6 +398,8 @@ class PosNotifier extends Notifier<PosState> {
     updatedCart[index] = item.copyWith(
       quantity: quantity,
       notes: notes != null ? notes.trim() : item.notes,
+      discountType: discountType ?? item.discountType,
+      discountValue: discountValue ?? item.discountValue,
     );
 
     state = state.copyWith(
@@ -294,7 +419,10 @@ class PosNotifier extends Notifier<PosState> {
 
   /// Empties all items from the current cart.
   void clearCart() {
-    state = state.copyWith(cartItems: const []);
+    state = state.copyWith(
+      cartItems: const [],
+      transactionDiscountValue: 0.0,
+    );
   }
 
   /// Resets search query and category filters to default.

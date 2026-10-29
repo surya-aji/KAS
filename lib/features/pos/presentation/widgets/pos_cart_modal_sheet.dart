@@ -10,15 +10,16 @@ import 'package:kas_usaha/shared/widgets/buttons/app_button.dart';
 import 'package:kas_usaha/shared/widgets/buttons/app_icon_button.dart';
 import 'package:kas_usaha/shared/widgets/dialogs/app_confirm_dialog.dart';
 
-/// Interactive Bottom Sheet modal displaying active cart items on mobile devices (Task T2.2).
+/// Interactive Bottom Sheet modal displaying active cart items on mobile devices (Task T2.2 & T2.3).
 ///
 /// Features:
-/// - Real-time Riverpod state reactivity as a [ConsumerWidget].
+/// - Real-time Riverpod state reactivity with full calculation breakdown (Task T2.3).
+/// - Direct item-level discount display and editing.
+/// - Transaction-level discount & tax adjustment trigger.
 /// - Direct quantity change via tapping quantity badge or edit icon.
 /// - Increment (+) and Decrement (-) with stock limits.
 /// - Delete individual items with button or swipe-to-dismiss.
 /// - Clear entire cart with confirmation dialog.
-/// - Live display of item-specific notes and subtotal amounts.
 class PosCartModalSheet extends ConsumerWidget {
   const PosCartModalSheet({
     super.key,
@@ -27,6 +28,7 @@ class PosCartModalSheet extends ConsumerWidget {
     required this.onDelete,
     required this.onEdit,
     required this.onClear,
+    this.onConfigureDiscountAndTax,
     this.onCheckout,
   });
 
@@ -45,6 +47,9 @@ class PosCartModalSheet extends ConsumerWidget {
   /// Callback to clear entire cart.
   final VoidCallback onClear;
 
+  /// Callback to open discount and tax configuration modal.
+  final VoidCallback? onConfigureDiscountAndTax;
+
   /// Callback to proceed to checkout / payment.
   final VoidCallback? onCheckout;
 
@@ -56,6 +61,7 @@ class PosCartModalSheet extends ConsumerWidget {
     required ValueChanged<CartItem> onDelete,
     required ValueChanged<CartItem> onEdit,
     required VoidCallback onClear,
+    VoidCallback? onConfigureDiscountAndTax,
     VoidCallback? onCheckout,
   }) {
     return showModalBottomSheet<void>(
@@ -68,6 +74,7 @@ class PosCartModalSheet extends ConsumerWidget {
         onDelete: onDelete,
         onEdit: onEdit,
         onClear: onClear,
+        onConfigureDiscountAndTax: onConfigureDiscountAndTax,
         onCheckout: onCheckout,
       ),
     );
@@ -99,10 +106,11 @@ class PosCartModalSheet extends ConsumerWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final posState = ref.watch(posProvider);
+    final calc = posState.calculation;
 
     return Container(
       constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.85,
+        maxHeight: MediaQuery.of(context).size.height * 0.88,
       ),
       decoration: BoxDecoration(
         color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
@@ -220,23 +228,147 @@ class PosCartModalSheet extends ConsumerWidget {
 
           const Divider(height: 1),
 
-          // Total and Close / Checkout Button
+          // Real-time Calculation Breakdown & Checkout Button (Task T2.3)
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(AppSpacing.md),
               child: Column(
                 children: [
+                  // Quick Discount & Tax Adjustment Row
+                  if (posState.hasItems && onConfigureDiscountAndTax != null) ...[
+                    InkWell(
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        onConfigureDiscountAndTax!();
+                      },
+                      borderRadius: AppRadius.roundedSm,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.sm,
+                          vertical: AppSpacing.xs,
+                        ),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primary.withAlpha(15),
+                          borderRadius: AppRadius.roundedSm,
+                          border: Border.all(
+                            color: theme.colorScheme.primary.withAlpha(50),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.tune_rounded,
+                              size: 16,
+                              color: theme.colorScheme.primary,
+                            ),
+                            const SizedBox(width: AppSpacing.xs),
+                            Expanded(
+                              child: Text(
+                                'Atur Diskon & Pajak',
+                                style: theme.textTheme.labelMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: theme.colorScheme.primary,
+                                ),
+                              ),
+                            ),
+                            if (calc.hasTransactionDiscount) ...[
+                              AppBadge(
+                                label: calc.transactionDiscountType.isPercentage
+                                    ? '-${calc.transactionDiscountValue.toStringAsFixed(calc.transactionDiscountValue % 1 == 0 ? 0 : 1)}%'
+                                    : '-${CurrencyFormatter.formatRupiah(calc.transactionDiscountAmount)}',
+                                variant: AppBadgeVariant.success,
+                              ),
+                              const SizedBox(width: AppSpacing.xxs),
+                            ],
+                            if (calc.isTaxEnabled) ...[
+                              AppBadge(
+                                label: 'PPN ${calc.taxRate.toStringAsFixed(calc.taxRate % 1 == 0 ? 0 : 1)}%',
+                                variant: AppBadgeVariant.info,
+                              ),
+                              const SizedBox(width: AppSpacing.xxs),
+                            ],
+                            Icon(
+                              Icons.chevron_right_rounded,
+                              size: 18,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                  ],
+
+                  // Subtotal
+                  _buildSummaryLine(
+                    'Subtotal (${calc.totalQuantity} item):',
+                    calc.formattedGrossSubtotal,
+                    theme,
+                  ),
+
+                  // Item Discounts
+                  if (calc.hasItemDiscounts)
+                    _buildSummaryLine(
+                      'Diskon Item:',
+                      '-${calc.formattedItemDiscounts}',
+                      theme,
+                      color: AppColors.error,
+                    ),
+
+                  // Transaction Discount
+                  if (calc.hasTransactionDiscount)
+                    _buildSummaryLine(
+                      '${calc.transactionDiscountLabel}:',
+                      '-${calc.formattedTransactionDiscountAmount}',
+                      theme,
+                      color: AppColors.error,
+                    ),
+
+                  // Tax (PPN)
+                  if (calc.isTaxEnabled) ...[
+                    _buildSummaryLine(
+                      'Dasar Pengenaan Pajak (DPP):',
+                      calc.formattedTaxableAmount,
+                      theme,
+                      isDimmed: true,
+                    ),
+                    _buildSummaryLine(
+                      '${calc.taxLabel}:',
+                      '+${calc.formattedTaxAmount}',
+                      theme,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ],
+
+                  const SizedBox(height: AppSpacing.xxs),
+                  const Divider(height: 1),
+                  const SizedBox(height: AppSpacing.xs),
+
+                  // Grand Total
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        'Total Pembayaran',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Total Pembayaran',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          if (calc.hasAnyDiscount)
+                            Text(
+                              'Hemat ${calc.formattedTotalDiscounts}',
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: AppColors.success,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                        ],
                       ),
                       Text(
-                        posState.formattedTotalAmount,
+                        calc.formattedGrandTotal,
                         style: theme.textTheme.headlineSmall?.copyWith(
                           fontWeight: FontWeight.w800,
                           color: theme.colorScheme.primary,
@@ -245,6 +377,8 @@ class PosCartModalSheet extends ConsumerWidget {
                     ],
                   ),
                   const SizedBox(height: AppSpacing.md),
+
+                  // Action Buttons
                   Row(
                     children: [
                       Expanded(
@@ -275,6 +409,46 @@ class PosCartModalSheet extends ConsumerWidget {
                   ),
                 ],
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryLine(
+    String label,
+    String value,
+    ThemeData theme, {
+    Color? color,
+    bool isDimmed = false,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 1.5),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: (isDimmed
+                      ? theme.textTheme.bodySmall
+                      : theme.textTheme.bodyMedium)
+                  ?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.xs),
+          Text(
+            value,
+            style: (isDimmed
+                    ? theme.textTheme.bodySmall
+                    : theme.textTheme.bodyMedium)
+                ?.copyWith(
+              fontWeight: isDimmed ? FontWeight.w500 : FontWeight.bold,
+              color: color,
             ),
           ),
         ],
@@ -347,12 +521,41 @@ class PosCartModalSheet extends ConsumerWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 1),
+                      // Price & Quantity
                       Text(
-                        '${CurrencyFormatter.formatRupiah(product.sellingPrice)} × ${item.quantity} = ${item.formattedSubtotal}',
+                        '${CurrencyFormatter.formatRupiah(product.sellingPrice)} × ${item.quantity}',
                         style: theme.textTheme.labelSmall?.copyWith(
-                          color: theme.colorScheme.primary,
-                          fontWeight: FontWeight.w700,
+                          color: theme.colorScheme.onSurfaceVariant,
                         ),
+                      ),
+                      const SizedBox(height: 1),
+                      // Line Subtotal & Discount Badge (Task T2.3)
+                      Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: AppSpacing.xs,
+                        runSpacing: 2,
+                        children: [
+                          Text(
+                            item.formattedSubtotal,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.primary,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          if (item.hasDiscount) ...[
+                            Text(
+                              item.formattedGrossSubtotal,
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                decoration: TextDecoration.lineThrough,
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            AppBadge(
+                              label: item.discountDescription,
+                              variant: AppBadgeVariant.success,
+                            ),
+                          ],
+                        ],
                       ),
                       if (item.hasNotes) ...[
                         const SizedBox(height: 2),

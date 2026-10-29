@@ -13,6 +13,7 @@ import 'package:kas_usaha/features/pos/presentation/widgets/pos_cart_bottom_bar.
 import 'package:kas_usaha/features/pos/presentation/widgets/pos_cart_modal_sheet.dart';
 import 'package:kas_usaha/features/pos/presentation/widgets/pos_cart_sidebar.dart';
 import 'package:kas_usaha/features/pos/presentation/widgets/pos_category_selector.dart';
+import 'package:kas_usaha/features/pos/presentation/widgets/pos_discount_tax_dialog.dart';
 import 'package:kas_usaha/features/pos/presentation/widgets/pos_product_card.dart';
 import 'package:kas_usaha/features/pos/presentation/widgets/pos_quantity_edit_dialog.dart';
 import 'package:kas_usaha/shared/widgets/dialogs/app_confirm_dialog.dart';
@@ -21,7 +22,7 @@ import 'package:kas_usaha/shared/widgets/feedback/app_loading.dart';
 import 'package:kas_usaha/shared/widgets/inputs/app_search_field.dart';
 import 'package:kas_usaha/shared/widgets/layout/responsive_layout.dart';
 
-/// Main Cashier (Point of Sale) Screen with responsive layouts for tablet and smartphone (Task T2.1).
+/// Main Cashier (Point of Sale) Screen with responsive layouts for tablet and smartphone (Task T2.1, T2.2 & T2.3).
 class PosScreen extends ConsumerStatefulWidget {
   const PosScreen({super.key});
 
@@ -60,15 +61,42 @@ class _PosScreenState extends ConsumerState<PosScreen> {
     PosQuantityEditDialog.show(
       context,
       cartItem: item,
-      onSave: (newQuantity, notes) {
+      onSave: (newQuantity, notes, [discountType, discountValue]) {
         ref.read(posProvider.notifier).updateCartItemDetails(
               item.product.id,
               quantity: newQuantity,
               notes: notes,
+              discountType: discountType,
+              discountValue: discountValue,
             );
       },
       onDelete: () {
         ref.read(posProvider.notifier).deleteItem(item.product.id);
+      },
+    );
+  }
+
+  void _openDiscountTaxDialog() {
+    final posState = ref.read(posProvider);
+    PosDiscountTaxDialog.show(
+      context,
+      cartItems: posState.cartItems,
+      initialDiscountType: posState.transactionDiscountType,
+      initialDiscountValue: posState.transactionDiscountValue,
+      initialIsTaxApplied: posState.isTaxApplied,
+      initialTaxRate: posState.taxRate,
+      onApply: ({
+        required discountType,
+        required discountValue,
+        required isTaxApplied,
+        required taxRate,
+      }) {
+        ref.read(posProvider.notifier).setTransactionDiscount(
+              type: discountType,
+              value: discountValue,
+            );
+        ref.read(posProvider.notifier).setTaxApplied(isTaxApplied);
+        ref.read(posProvider.notifier).setTaxRate(taxRate);
       },
     );
   }
@@ -107,11 +135,14 @@ class _PosScreenState extends ConsumerState<PosScreen> {
       onClear: () {
         ref.read(posProvider.notifier).clearCart();
       },
+      onConfigureDiscountAndTax: () {
+        _openDiscountTaxDialog();
+      },
       onCheckout: () {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Siap memproses pesanan (${ref.read(posProvider).formattedTotalAmount}) — Dilanjutkan pada Task T2.3 / T2.4',
+              'Siap memproses pesanan (${ref.read(posProvider).formattedTotalAmount}) — Dilanjutkan pada Task T2.4',
             ),
             behavior: SnackBarBehavior.floating,
           ),
@@ -298,13 +329,14 @@ class _PosScreenState extends ConsumerState<PosScreen> {
           ),
         ),
 
-        // Right Column: Order / Cart Sidebar
+        // Right Column: Order / Cart Sidebar (Task T2.3)
         SizedBox(
           width: constraints.maxWidth >= 1100 ? 380 : 340,
           child: PosCartSidebar(
             cartItems: posState.cartItems,
             totalQuantity: posState.totalQuantity,
             totalAmount: posState.totalAmount,
+            calculation: posState.calculation,
             onIncrementItem: (item) {
               ref.read(posProvider.notifier).addToCart(item.product);
             },
@@ -318,11 +350,12 @@ class _PosScreenState extends ConsumerState<PosScreen> {
               _openQuantityEditDialog(item);
             },
             onClearCart: () => _confirmClearCart(),
+            onConfigureDiscountAndTax: _openDiscountTaxDialog,
             onCheckout: () {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text(
-                    'Siap memproses pesanan (${posState.formattedTotalAmount}) — Dilanjutkan pada Task T2.2 / T2.4',
+                    'Siap memproses pesanan (${posState.formattedTotalAmount}) — Dilanjutkan pada Task T2.4',
                   ),
                   behavior: SnackBarBehavior.floating,
                 ),
@@ -395,10 +428,11 @@ class _PosScreenState extends ConsumerState<PosScreen> {
           ),
         ),
 
-        // Mobile Sticky Cart Bottom Bar
+        // Mobile Sticky Cart Bottom Bar (Task T2.3)
         PosCartBottomBar(
           totalQuantity: posState.totalQuantity,
           totalAmount: posState.totalAmount,
+          totalDiscounts: posState.calculation.totalDiscounts,
           onViewCart: () {
             _showMobileCartSheet(context);
           },
@@ -422,7 +456,8 @@ class _PosScreenState extends ConsumerState<PosScreen> {
             posState.selectedCategoryId != null)) {
       return AppEmptyState(
         title: 'Produk Tidak Ditemukan',
-        message: 'Tidak ada produk kasir yang cocok dengan kata kunci atau kategori terpilih.',
+        message:
+            'Tidak ada produk kasir yang cocok dengan kata kunci atau kategori terpilih.',
         icon: Icons.search_off_rounded,
         actionText: 'Reset Filter & Pencarian',
         onAction: () {

@@ -318,5 +318,77 @@ void main() {
       expect(item.notes, 'Pedas sedang saja');
       expect(container.read(posProvider).totalAmount, 75000);
     });
+
+    test('setItemDiscount and clearItemDiscount update item discount and recalculate real-time amounts (Task T2.3)', () {
+      final p1 = testProducts[0]; // 25.000
+      container.read(posProvider.notifier).addToCart(p1);
+
+      // Apply 20% discount on Nasi Goreng (20% of 25.000 = 5.000, net = 20.000)
+      final applied = container.read(posProvider.notifier).setItemDiscount(
+            p1.id,
+            discountType: DiscountType.percentage,
+            discountValue: 20.0,
+          );
+      expect(applied, isTrue);
+
+      final state = container.read(posProvider);
+      expect(state.calculation.grossSubtotal, 25000);
+      expect(state.calculation.itemDiscounts, 5000);
+      expect(state.calculation.grandTotal, 20000);
+      expect(state.totalAmount, 20000);
+      expect(state.formattedTotalAmount, 'Rp20.000');
+
+      // Clear item discount
+      container.read(posProvider.notifier).clearItemDiscount(p1.id);
+      expect(container.read(posProvider).calculation.itemDiscounts, 0);
+      expect(container.read(posProvider).totalAmount, 25000);
+    });
+
+    test('setTransactionDiscount and clearTransactionDiscount update calculation breakdown (Task T2.3)', () {
+      final p1 = testProducts[0]; // 25.000 * 2 = 50.000
+      container.read(posProvider.notifier).addToCart(p1);
+      container.read(posProvider.notifier).addToCart(p1);
+
+      // Apply fixed transaction discount of Rp 10.000
+      container.read(posProvider.notifier).setTransactionDiscount(
+            type: DiscountType.fixed,
+            value: 10000.0,
+          );
+
+      var state = container.read(posProvider);
+      expect(state.calculation.grossSubtotal, 50000);
+      expect(state.calculation.transactionDiscountAmount, 10000);
+      expect(state.calculation.totalDiscounts, 10000);
+      expect(state.calculation.grandTotal, 40000);
+
+      // Clear transaction discount
+      container.read(posProvider.notifier).clearTransactionDiscount();
+      state = container.read(posProvider);
+      expect(state.calculation.transactionDiscountAmount, 0);
+      expect(state.calculation.grandTotal, 50000);
+    });
+
+    test('setTaxApplied, toggleTax, and setTaxRate dynamically recalculate taxes and grand total (Task T2.3)', () {
+      final p1 = testProducts[0]; // 25.000 * 2 = 50.000
+      container.read(posProvider.notifier).addToCart(p1);
+      container.read(posProvider.notifier).addToCart(p1);
+
+      // Enable tax (PPN 11%)
+      container.read(posProvider.notifier).setTaxApplied(true);
+      container.read(posProvider.notifier).setTaxRate(11.0);
+
+      var state = container.read(posProvider);
+      expect(state.isTaxApplied, isTrue);
+      expect(state.calculation.taxableAmount, 50000);
+      expect(state.calculation.taxAmount, 5500); // 11% of 50.000 = 5.500
+      expect(state.calculation.grandTotal, 55500); // 50.000 + 5.500 = 55.500
+
+      // Toggle tax OFF
+      container.read(posProvider.notifier).toggleTax();
+      state = container.read(posProvider);
+      expect(state.isTaxApplied, isFalse);
+      expect(state.calculation.taxAmount, 0);
+      expect(state.calculation.grandTotal, 50000);
+    });
   });
 }

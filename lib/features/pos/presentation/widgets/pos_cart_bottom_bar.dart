@@ -4,20 +4,27 @@ import 'package:kas_usaha/app/theme/app_spacing.dart';
 import 'package:kas_usaha/shared/formatters/currency_formatter.dart';
 import 'package:kas_usaha/shared/widgets/buttons/app_button.dart';
 
-/// Sticky bottom cart summary bar for mobile smartphones (Task T2.1).
+/// Sticky bottom cart summary bar for mobile smartphones (Task T2.1, T2.2 & T2.3).
+///
+/// Displays real-time grand total amount (reflecting item/transaction discounts and tax)
+/// and highlights savings when discounts are active.
 class PosCartBottomBar extends StatelessWidget {
   const PosCartBottomBar({
     super.key,
     required this.totalQuantity,
     required this.totalAmount,
+    this.totalDiscounts = 0,
     required this.onViewCart,
   });
 
   /// Total sum of item quantities.
   final int totalQuantity;
 
-  /// Total gross amount in Rupiah.
+  /// Total grand amount in Rupiah (reflects discounts and taxes).
   final int totalAmount;
+
+  /// Total discount savings amount in Rupiah (Task T2.3).
+  final int totalDiscounts;
 
   /// Callback when user taps "Lihat Pesanan" / Cart button.
   final VoidCallback onViewCart;
@@ -27,6 +34,7 @@ class PosCartBottomBar extends StatelessWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final hasItems = totalQuantity > 0;
+    final hasSavings = totalDiscounts > 0;
 
     return Container(
       padding: const EdgeInsets.symmetric(
@@ -104,17 +112,27 @@ class PosCartBottomBar extends StatelessWidget {
             ),
             const SizedBox(width: AppSpacing.md),
 
-            // Item count & Total Price
+            // Item count & Real-time Grand Total
             Expanded(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    hasItems ? '$totalQuantity item terpilih' : 'Keranjang kosong',
+                    hasItems
+                        ? (hasSavings
+                            ? '$totalQuantity item • Hemat ${CurrencyFormatter.formatRupiah(totalDiscounts)}'
+                            : '$totalQuantity item terpilih')
+                        : 'Keranjang kosong',
                     style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
+                      color: hasSavings
+                          ? AppColors.success
+                          : theme.colorScheme.onSurfaceVariant,
+                      fontWeight:
+                          hasSavings ? FontWeight.w600 : FontWeight.normal,
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 1),
                   Text(
@@ -125,6 +143,8 @@ class PosCartBottomBar extends StatelessWidget {
                           ? theme.colorScheme.primary
                           : theme.colorScheme.onSurfaceVariant,
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
