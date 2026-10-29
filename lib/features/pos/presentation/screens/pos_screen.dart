@@ -10,11 +10,12 @@ import 'package:kas_usaha/features/catalog/presentation/providers/product_provid
 import 'package:kas_usaha/features/pos/domain/models/cart_item.dart';
 import 'package:kas_usaha/features/pos/presentation/providers/pos_provider.dart';
 import 'package:kas_usaha/features/pos/presentation/widgets/pos_cart_bottom_bar.dart';
+import 'package:kas_usaha/features/pos/presentation/widgets/pos_cart_modal_sheet.dart';
 import 'package:kas_usaha/features/pos/presentation/widgets/pos_cart_sidebar.dart';
 import 'package:kas_usaha/features/pos/presentation/widgets/pos_category_selector.dart';
 import 'package:kas_usaha/features/pos/presentation/widgets/pos_product_card.dart';
-import 'package:kas_usaha/shared/formatters/currency_formatter.dart';
-import 'package:kas_usaha/shared/widgets/buttons/app_button.dart';
+import 'package:kas_usaha/features/pos/presentation/widgets/pos_quantity_edit_dialog.dart';
+import 'package:kas_usaha/shared/widgets/dialogs/app_confirm_dialog.dart';
 import 'package:kas_usaha/shared/widgets/feedback/app_empty_state.dart';
 import 'package:kas_usaha/shared/widgets/feedback/app_loading.dart';
 import 'package:kas_usaha/shared/widgets/inputs/app_search_field.dart';
@@ -55,27 +56,67 @@ class _PosScreenState extends ConsumerState<PosScreen> {
     super.dispose();
   }
 
-  void _showMobileCartSheet(BuildContext context, PosState posState) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => _MobileCartModal(
-        posState: posState,
-        onIncrement: (item) {
-          ref.read(posProvider.notifier).addToCart(item.product);
-        },
-        onDecrement: (item) {
-          ref.read(posProvider.notifier).removeFromCart(item.product.id);
-        },
-        onDelete: (item) {
-          ref.read(posProvider.notifier).deleteItem(item.product.id);
-        },
-        onClear: () {
-          ref.read(posProvider.notifier).clearCart();
-          Navigator.of(ctx).pop();
-        },
-      ),
+  void _openQuantityEditDialog(CartItem item) {
+    PosQuantityEditDialog.show(
+      context,
+      cartItem: item,
+      onSave: (newQuantity, notes) {
+        ref.read(posProvider.notifier).updateCartItemDetails(
+              item.product.id,
+              quantity: newQuantity,
+              notes: notes,
+            );
+      },
+      onDelete: () {
+        ref.read(posProvider.notifier).deleteItem(item.product.id);
+      },
+    );
+  }
+
+  Future<void> _confirmClearCart() async {
+    final confirmed = await AppConfirmDialog.show(
+      context,
+      title: 'Kosongkan Keranjang?',
+      message: 'Apakah Anda yakin ingin menghapus semua item dalam pesanan ini?',
+      confirmText: 'Kosongkan',
+      cancelText: 'Batal',
+      isDanger: true,
+      icon: Icons.delete_sweep_rounded,
+    );
+
+    if (confirmed == true && mounted) {
+      ref.read(posProvider.notifier).clearCart();
+    }
+  }
+
+  void _showMobileCartSheet(BuildContext context) {
+    PosCartModalSheet.show(
+      context,
+      onIncrement: (item) {
+        ref.read(posProvider.notifier).addToCart(item.product);
+      },
+      onDecrement: (item) {
+        ref.read(posProvider.notifier).removeFromCart(item.product.id);
+      },
+      onDelete: (item) {
+        ref.read(posProvider.notifier).deleteItem(item.product.id);
+      },
+      onEdit: (item) {
+        _openQuantityEditDialog(item);
+      },
+      onClear: () {
+        ref.read(posProvider.notifier).clearCart();
+      },
+      onCheckout: () {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Siap memproses pesanan (${ref.read(posProvider).formattedTotalAmount}) — Dilanjutkan pada Task T2.3 / T2.4',
+            ),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      },
     );
   }
 
@@ -273,9 +314,10 @@ class _PosScreenState extends ConsumerState<PosScreen> {
             onDeleteItem: (item) {
               ref.read(posProvider.notifier).deleteItem(item.product.id);
             },
-            onClearCart: () {
-              ref.read(posProvider.notifier).clearCart();
+            onEditItem: (item) {
+              _openQuantityEditDialog(item);
             },
+            onClearCart: () => _confirmClearCart(),
             onCheckout: () {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -358,7 +400,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
           totalQuantity: posState.totalQuantity,
           totalAmount: posState.totalAmount,
           onViewCart: () {
-            _showMobileCartSheet(context, posState);
+            _showMobileCartSheet(context);
           },
         ),
       ],
@@ -430,216 +472,6 @@ class _PosScreenState extends ConsumerState<PosScreen> {
           },
         );
       },
-    );
-  }
-}
-
-/// Bottom Sheet displaying cart items summary on mobile devices.
-class _MobileCartModal extends StatelessWidget {
-  const _MobileCartModal({
-    required this.posState,
-    required this.onIncrement,
-    required this.onDecrement,
-    required this.onDelete,
-    required this.onClear,
-  });
-
-  final PosState posState;
-  final ValueChanged<CartItem> onIncrement;
-  final ValueChanged<CartItem> onDecrement;
-  final ValueChanged<CartItem> onDelete;
-  final VoidCallback onClear;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    return Container(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.75,
-      ),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Drag handle
-          Center(
-            child: Container(
-              margin: const EdgeInsets.only(top: 10, bottom: 6),
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: theme.colorScheme.onSurfaceVariant.withAlpha(70),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-
-          // Header
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.lg,
-              vertical: AppSpacing.sm,
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          'Rincian Pesanan',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: AppSpacing.xs),
-                      Text(
-                        '(${posState.totalQuantity} item)',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (posState.cartItems.isNotEmpty)
-                  IconButton(
-                    icon: const Icon(
-                      Icons.delete_sweep_rounded,
-                      size: 20,
-                      color: AppColors.error,
-                    ),
-                    tooltip: 'Kosongkan',
-                    visualDensity: VisualDensity.compact,
-                    onPressed: onClear,
-                  ),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-
-          // Cart Items List
-          Flexible(
-            child: ListView.separated(
-              padding: const EdgeInsets.all(AppSpacing.md),
-              shrinkWrap: true,
-              itemCount: posState.cartItems.length,
-              separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
-              itemBuilder: (context, index) {
-                final item = posState.cartItems[index];
-                return Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            item.product.name,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          Text(
-                            '${CurrencyFormatter.formatRupiah(item.product.sellingPrice)} × ${item.quantity} = ${item.formattedSubtotal}',
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: theme.colorScheme.primary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.remove_circle_outline, size: 20),
-                      color: theme.colorScheme.onSurfaceVariant,
-                      visualDensity: VisualDensity.compact,
-                      padding: EdgeInsets.zero,
-                      constraints:
-                          const BoxConstraints(minWidth: 28, minHeight: 28),
-                      onPressed: () => onDecrement(item),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: Text(
-                        '${item.quantity}',
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.add_circle_outline, size: 20),
-                      color: theme.colorScheme.primary,
-                      visualDensity: VisualDensity.compact,
-                      padding: EdgeInsets.zero,
-                      constraints:
-                          const BoxConstraints(minWidth: 28, minHeight: 28),
-                      onPressed: () => onIncrement(item),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline_rounded, size: 20),
-                      color: AppColors.error,
-                      visualDensity: VisualDensity.compact,
-                      padding: EdgeInsets.zero,
-                      constraints:
-                          const BoxConstraints(minWidth: 28, minHeight: 28),
-                      onPressed: () => onDelete(item),
-                    ),
-                  ],
-                );
-              },
-            ),
-          ),
-
-          const Divider(height: 1),
-
-          // Total and Close / Checkout Button
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.md),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Total Pembayaran',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        posState.formattedTotalAmount,
-                        style: theme.textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.w800,
-                          color: theme.colorScheme.primary,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  AppButton(
-                    text: 'Tutup Keranjang',
-                    variant: AppButtonVariant.primary,
-                    size: AppButtonSize.large,
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

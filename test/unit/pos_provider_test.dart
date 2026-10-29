@@ -243,5 +243,80 @@ void main() {
       expect(container.read(posProvider).searchQuery, '');
       expect(container.read(posProvider).selectedCategoryId, isNull);
     });
+
+    test('updateItemQuantity updates item quantity directly and recalculates amounts (Task T2.2)', () {
+      final p1 = testProducts[0]; // Nasi Goreng, stock 10, price 25.000
+      container.read(posProvider.notifier).addToCart(p1);
+
+      expect(container.read(posProvider).getCartQuantity(p1.id), 1);
+      expect(container.read(posProvider).totalAmount, 25000);
+
+      // Directly update quantity to 5
+      final success = container
+          .read(posProvider.notifier)
+          .updateItemQuantity(p1.id, 5);
+      expect(success, isTrue);
+
+      final state = container.read(posProvider);
+      expect(state.getCartQuantity(p1.id), 5);
+      expect(state.totalQuantity, 5);
+      expect(state.totalAmount, 125000);
+      expect(state.cartItems.first.formattedSubtotal, 'Rp125.000');
+    });
+
+    test('updateItemQuantity enforces tracked stock limits (Task T2.2)', () {
+      final p1 = testProducts[0]; // Nasi Goreng, stock: 10
+      container.read(posProvider.notifier).addToCart(p1);
+
+      // Try setting quantity to 15 (> stock 10)
+      final success = container
+          .read(posProvider.notifier)
+          .updateItemQuantity(p1.id, 15);
+      expect(success, isFalse);
+
+      final state = container.read(posProvider);
+      expect(state.getCartQuantity(p1.id), 1); // Remains 1
+      expect(state.errorMessage, contains('tidak mencukupi'));
+    });
+
+    test('updateItemQuantity with 0 or negative removes item from cart (Task T2.2)', () {
+      final p1 = testProducts[0];
+      container.read(posProvider.notifier).addToCart(p1);
+      expect(container.read(posProvider).isInCart(p1.id), isTrue);
+
+      final success = container
+          .read(posProvider.notifier)
+          .updateItemQuantity(p1.id, 0);
+      expect(success, isTrue);
+      expect(container.read(posProvider).isInCart(p1.id), isFalse);
+      expect(container.read(posProvider).totalQuantity, 0);
+    });
+
+    test('updateItemNotes and updateCartItemDetails handle customer notes and atomic updates (Task T2.2)', () {
+      final p1 = testProducts[0];
+      container.read(posProvider.notifier).addToCart(p1);
+
+      // Update notes
+      container
+          .read(posProvider.notifier)
+          .updateItemNotes(p1.id, 'Pedas level 5, tanpa daun bawang');
+
+      var item = container.read(posProvider).cartItems.first;
+      expect(item.notes, 'Pedas level 5, tanpa daun bawang');
+      expect(item.hasNotes, isTrue);
+
+      // Atomic update of both quantity and notes
+      final success = container.read(posProvider.notifier).updateCartItemDetails(
+            p1.id,
+            quantity: 3,
+            notes: 'Pedas sedang saja',
+          );
+      expect(success, isTrue);
+
+      item = container.read(posProvider).cartItems.first;
+      expect(item.quantity, 3);
+      expect(item.notes, 'Pedas sedang saja');
+      expect(container.read(posProvider).totalAmount, 75000);
+    });
   });
 }

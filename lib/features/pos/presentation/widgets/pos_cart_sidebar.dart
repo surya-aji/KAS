@@ -7,7 +7,12 @@ import 'package:kas_usaha/shared/widgets/badges/app_badge.dart';
 import 'package:kas_usaha/shared/widgets/buttons/app_button.dart';
 import 'package:kas_usaha/shared/widgets/buttons/app_icon_button.dart';
 
-/// Dedicated order summary sidebar panel for Tablet landscape layouts (Task T2.1).
+/// Dedicated interactive order summary sidebar panel for Tablet landscape layouts (Task T2.1 & T2.2).
+///
+/// Supports:
+/// - Increment (+) and Decrement (-) items.
+/// - Delete individual items or clear entire cart.
+/// - Direct quantity change & notes editing via interactive quantity badge / edit button.
 class PosCartSidebar extends StatelessWidget {
   const PosCartSidebar({
     super.key,
@@ -18,6 +23,7 @@ class PosCartSidebar extends StatelessWidget {
     required this.onDecrementItem,
     required this.onDeleteItem,
     required this.onClearCart,
+    this.onEditItem,
     this.onCheckout,
   });
 
@@ -38,6 +44,9 @@ class PosCartSidebar extends StatelessWidget {
 
   /// Callback when delete is pressed on an item.
   final ValueChanged<CartItem> onDeleteItem;
+
+  /// Callback when user wants to edit quantity or notes directly.
+  final ValueChanged<CartItem>? onEditItem;
 
   /// Callback to clear entire cart.
   final VoidCallback onClearCart;
@@ -252,6 +261,10 @@ class PosCartSidebar extends StatelessWidget {
     bool isDark,
     CartItem item,
   ) {
+    final product = item.product;
+    final isMaxStockReached =
+        product.trackStock && item.quantity >= product.stock;
+
     return Container(
       padding: const EdgeInsets.all(AppSpacing.sm),
       decoration: BoxDecoration(
@@ -264,42 +277,74 @@ class PosCartSidebar extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Product details
+          // Product details & customer notes
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.product.name,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+            child: InkWell(
+              onTap: onEditItem != null ? () => onEditItem!(item) : null,
+              borderRadius: AppRadius.roundedSm,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      product.name,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: AppSpacing.xxs),
+                    Text(
+                      '${CurrencyFormatter.formatRupiah(product.sellingPrice)} / ${product.unit}',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    if (item.hasNotes) ...[
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.note_alt_outlined,
+                            size: 13,
+                            color: theme.colorScheme.primary,
+                          ),
+                          const SizedBox(width: 3),
+                          Expanded(
+                            child: Text(
+                              item.notes,
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: theme.colorScheme.primary,
+                                fontStyle: FontStyle.italic,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    const SizedBox(height: AppSpacing.xxs),
+                    Text(
+                      item.formattedSubtotal,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: AppSpacing.xxs),
-                Text(
-                  '${CurrencyFormatter.formatRupiah(item.product.sellingPrice)} / ${item.product.unit}',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.xxs),
-                Text(
-                  item.formattedSubtotal,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: theme.colorScheme.primary,
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
 
-          // Stepper Controls (- / quantity / +)
+          // Stepper & Direct Quantity Editing Controls
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // Decrement (-)
               AppIconButton(
                 icon: Icons.remove_rounded,
                 size: 28,
@@ -307,28 +352,67 @@ class PosCartSidebar extends StatelessWidget {
                 tooltip: 'Kurangi Kuantitas',
                 onPressed: () => onDecrementItem(item),
               ),
+
+              // Interactive Quantity Badge (Tap to edit directly)
               Padding(
                 padding:
                     const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
-                child: Container(
-                  constraints: const BoxConstraints(minWidth: 24),
-                  alignment: Alignment.center,
-                  child: Text(
-                    '${item.quantity}',
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
+                child: Tooltip(
+                  message: 'Sentuh untuk ubah jumlah langsung',
+                  child: InkWell(
+                    onTap: onEditItem != null ? () => onEditItem!(item) : null,
+                    borderRadius: BorderRadius.circular(4),
+                    child: Container(
+                      constraints: const BoxConstraints(minWidth: 32),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary.withAlpha(20),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: theme.colorScheme.primary.withAlpha(80),
+                          width: 1,
+                        ),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        '${item.quantity}',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
                     ),
                   ),
                 ),
               ),
+
+              // Increment (+)
               AppIconButton(
                 icon: Icons.add_rounded,
                 size: 28,
                 iconSize: 16,
-                tooltip: 'Tambah Kuantitas',
-                onPressed: () => onIncrementItem(item),
+                tooltip: isMaxStockReached
+                    ? 'Stok maksimal tercapai'
+                    : 'Tambah Kuantitas',
+                onPressed: isMaxStockReached ? null : () => onIncrementItem(item),
               ),
-              const SizedBox(width: AppSpacing.xs),
+              const SizedBox(width: AppSpacing.xxs),
+
+              // Edit Notes & Details
+              if (onEditItem != null)
+                AppIconButton(
+                  icon: Icons.edit_note_rounded,
+                  size: 28,
+                  iconSize: 17,
+                  tooltip: 'Ubah Jumlah & Catatan',
+                  onPressed: () => onEditItem!(item),
+                ),
+              const SizedBox(width: AppSpacing.xxs),
+
+              // Delete button
               AppIconButton(
                 icon: Icons.delete_outline_rounded,
                 size: 28,

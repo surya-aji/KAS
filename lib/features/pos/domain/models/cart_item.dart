@@ -29,6 +29,9 @@ class CartItem {
   /// Formatted subtotal string (e.g. 'Rp50.000').
   String get formattedSubtotal => CurrencyFormatter.formatRupiah(subtotal);
 
+  /// Whether this item has custom notes or special requests.
+  bool get hasNotes => notes.trim().isNotEmpty;
+
   /// Creates a copy of this cart item with updated fields.
   CartItem copyWith({
     Product? product,

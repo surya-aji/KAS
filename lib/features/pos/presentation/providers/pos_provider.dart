@@ -200,6 +200,90 @@ class PosNotifier extends Notifier<PosState> {
     }
   }
 
+  /// Updates product quantity directly (Task T2.2).
+  ///
+  /// Enforces stock validations:
+  /// - If [newQuantity] <= 0, the item is removed from the cart.
+  /// - If inventory is tracked and [newQuantity] exceeds stock, sets an error and returns false.
+  /// - Otherwise updates the quantity and returns true.
+  bool updateItemQuantity(String productId, int newQuantity) {
+    final index =
+        state.cartItems.indexWhere((item) => item.product.id == productId);
+    if (index < 0) return false;
+
+    final item = state.cartItems[index];
+
+    if (newQuantity <= 0) {
+      deleteItem(productId);
+      return true;
+    }
+
+    if (item.product.trackStock && newQuantity > item.product.stock) {
+      state = state.copyWith(
+        errorMessage:
+            'Stok "${item.product.name}" tidak mencukupi (Tersisa ${item.product.stock} ${item.product.unit}).',
+      );
+      return false;
+    }
+
+    final updatedCart = List<CartItem>.from(state.cartItems);
+    updatedCart[index] = item.copyWith(quantity: newQuantity);
+    state = state.copyWith(
+      cartItems: updatedCart,
+      clearError: true,
+    );
+    return true;
+  }
+
+  /// Updates custom customer notes or special requests for an item in the cart.
+  void updateItemNotes(String productId, String notes) {
+    final index =
+        state.cartItems.indexWhere((item) => item.product.id == productId);
+    if (index >= 0) {
+      final updatedCart = List<CartItem>.from(state.cartItems);
+      updatedCart[index] = updatedCart[index].copyWith(notes: notes.trim());
+      state = state.copyWith(cartItems: updatedCart);
+    }
+  }
+
+  /// Atomically updates both quantity and notes for an item in the cart.
+  bool updateCartItemDetails(
+    String productId, {
+    required int quantity,
+    String? notes,
+  }) {
+    final index =
+        state.cartItems.indexWhere((item) => item.product.id == productId);
+    if (index < 0) return false;
+
+    final item = state.cartItems[index];
+
+    if (quantity <= 0) {
+      deleteItem(productId);
+      return true;
+    }
+
+    if (item.product.trackStock && quantity > item.product.stock) {
+      state = state.copyWith(
+        errorMessage:
+            'Stok "${item.product.name}" tidak mencukupi (Tersisa ${item.product.stock} ${item.product.unit}).',
+      );
+      return false;
+    }
+
+    final updatedCart = List<CartItem>.from(state.cartItems);
+    updatedCart[index] = item.copyWith(
+      quantity: quantity,
+      notes: notes != null ? notes.trim() : item.notes,
+    );
+
+    state = state.copyWith(
+      cartItems: updatedCart,
+      clearError: true,
+    );
+    return true;
+  }
+
   /// Removes an item completely from the cart regardless of its quantity.
   void deleteItem(String productId) {
     final updatedCart = state.cartItems
