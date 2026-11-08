@@ -4,9 +4,9 @@ import 'package:kas_usaha/features/catalog/domain/models/product.dart';
 import 'package:kas_usaha/features/catalog/presentation/providers/product_provider.dart';
 import 'package:kas_usaha/features/pos/domain/models/cart_item.dart';
 import 'package:kas_usaha/features/pos/domain/models/discount_type.dart';
+import 'package:kas_usaha/features/pos/domain/models/payment_method.dart';
 import 'package:kas_usaha/features/pos/domain/models/pos_calculation.dart';
 import 'package:kas_usaha/features/pos/domain/services/transaction_calculator.dart';
-import 'package:kas_usaha/shared/formatters/currency_formatter.dart';
 
 /// State representation for the POS cashier screen.
 ///
@@ -21,6 +21,8 @@ class PosState {
     this.transactionDiscountValue = 0.0,
     this.isTaxApplied = false,
     this.taxRate = 11.0,
+    this.selectedPaymentMethod = PaymentMethodType.cash,
+    this.paymentResult,
     this.errorMessage,
     this.successMessage,
   });
@@ -45,6 +47,12 @@ class PosState {
 
   /// Applicable tax rate percentage (e.g. 11.0 for PPN 11%).
   final double taxRate;
+
+  /// Currently selected payment method type (Task T2.4).
+  final PaymentMethodType selectedPaymentMethod;
+
+  /// Processed or confirmed payment details for this transaction (Task T2.4).
+  final PaymentResult? paymentResult;
 
   /// Temporary feedback error message.
   final String? errorMessage;
@@ -96,6 +104,9 @@ class PosState {
     double? transactionDiscountValue,
     bool? isTaxApplied,
     double? taxRate,
+    PaymentMethodType? selectedPaymentMethod,
+    PaymentResult? paymentResult,
+    bool clearPaymentResult = false,
     String? errorMessage,
     String? successMessage,
     bool clearError = false,
@@ -113,6 +124,11 @@ class PosState {
           transactionDiscountValue ?? this.transactionDiscountValue,
       isTaxApplied: isTaxApplied ?? this.isTaxApplied,
       taxRate: taxRate ?? this.taxRate,
+      selectedPaymentMethod:
+          selectedPaymentMethod ?? this.selectedPaymentMethod,
+      paymentResult: clearPaymentResult
+          ? null
+          : (paymentResult ?? this.paymentResult),
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       successMessage:
           clearSuccess ? null : (successMessage ?? this.successMessage),
@@ -131,6 +147,8 @@ class PosState {
           transactionDiscountValue == other.transactionDiscountValue &&
           isTaxApplied == other.isTaxApplied &&
           taxRate == other.taxRate &&
+          selectedPaymentMethod == other.selectedPaymentMethod &&
+          paymentResult == other.paymentResult &&
           errorMessage == other.errorMessage &&
           successMessage == other.successMessage;
 
@@ -143,6 +161,8 @@ class PosState {
       transactionDiscountValue.hashCode ^
       isTaxApplied.hashCode ^
       taxRate.hashCode ^
+      selectedPaymentMethod.hashCode ^
+      paymentResult.hashCode ^
       errorMessage.hashCode ^
       successMessage.hashCode;
 
@@ -417,12 +437,33 @@ class PosNotifier extends Notifier<PosState> {
     state = state.copyWith(cartItems: updatedCart);
   }
 
-  /// Empties all items from the current cart.
+  /// Empties all items from the current cart and clears payment state.
   void clearCart() {
     state = state.copyWith(
       cartItems: const [],
       transactionDiscountValue: 0.0,
+      clearPaymentResult: true,
     );
+  }
+
+  /// Sets the currently active payment method (Task T2.4).
+  void setSelectedPaymentMethod(PaymentMethodType method) {
+    state = state.copyWith(selectedPaymentMethod: method);
+  }
+
+  /// Records the confirmed payment result for this transaction (Task T2.4).
+  void setPaymentResult(PaymentResult result) {
+    state = state.copyWith(
+      paymentResult: result,
+      selectedPaymentMethod: result.method,
+      successMessage:
+          'Pembayaran ${result.method.label} berhasil dikonfirmasi (${result.formattedAmountPaid})',
+    );
+  }
+
+  /// Clears the active payment result.
+  void clearPaymentResult() {
+    state = state.copyWith(clearPaymentResult: true);
   }
 
   /// Resets search query and category filters to default.

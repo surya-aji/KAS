@@ -14,6 +14,7 @@ import 'package:kas_usaha/features/pos/presentation/widgets/pos_cart_modal_sheet
 import 'package:kas_usaha/features/pos/presentation/widgets/pos_cart_sidebar.dart';
 import 'package:kas_usaha/features/pos/presentation/widgets/pos_category_selector.dart';
 import 'package:kas_usaha/features/pos/presentation/widgets/pos_discount_tax_dialog.dart';
+import 'package:kas_usaha/features/pos/presentation/widgets/pos_payment_modal.dart';
 import 'package:kas_usaha/features/pos/presentation/widgets/pos_product_card.dart';
 import 'package:kas_usaha/features/pos/presentation/widgets/pos_quantity_edit_dialog.dart';
 import 'package:kas_usaha/shared/widgets/dialogs/app_confirm_dialog.dart';
@@ -117,6 +118,52 @@ class _PosScreenState extends ConsumerState<PosScreen> {
     }
   }
 
+  Future<void> _openPaymentModal() async {
+    final posState = ref.read(posProvider);
+    if (!posState.hasItems) return;
+
+    final businessProfile = ref.read(businessProfileProvider).profile;
+
+    final result = await PosPaymentModal.show(
+      context,
+      totalAmount: posState.totalAmount,
+      totalQuantity: posState.totalQuantity,
+      businessName: businessProfile.name,
+      calculation: posState.calculation,
+      onPaymentConfirmed: (paymentResult) {
+        ref.read(posProvider.notifier).setPaymentResult(paymentResult);
+      },
+    );
+
+    if (result != null && mounted) {
+      final changeInfo = result.method.isCash && result.changeAmount > 0
+          ? ' (Kembalian: ${result.formattedChangeAmount})'
+          : '';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(
+                Icons.check_circle_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  'Pembayaran ${result.method.label} berhasil: ${result.formattedAmountPaid}$changeInfo',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: AppColors.success,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   void _showMobileCartSheet(BuildContext context) {
     PosCartModalSheet.show(
       context,
@@ -139,14 +186,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
         _openDiscountTaxDialog();
       },
       onCheckout: () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Siap memproses pesanan (${ref.read(posProvider).formattedTotalAmount}) — Dilanjutkan pada Task T2.4',
-            ),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        _openPaymentModal();
       },
     );
   }
@@ -351,16 +391,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
             },
             onClearCart: () => _confirmClearCart(),
             onConfigureDiscountAndTax: _openDiscountTaxDialog,
-            onCheckout: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    'Siap memproses pesanan (${posState.formattedTotalAmount}) — Dilanjutkan pada Task T2.4',
-                  ),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
-            },
+            onCheckout: _openPaymentModal,
           ),
         ),
       ],
